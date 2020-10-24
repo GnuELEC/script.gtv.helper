@@ -42,11 +42,6 @@ class Main(xbmc.Monitor):
 
             self.waitForAbort(0.1)
 
-        try:
-            self.dbConnection.close()
-        except:
-            pass
-
     def createDatabase(self):
         try:
             if not os.path.exists(ADDON_DATA_PATH):
