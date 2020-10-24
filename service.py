@@ -7,6 +7,8 @@ import hashlib
 import sqlite3
 
 from PIL import Image, ImageEnhance
+from contextlib import closing
+
 try:
     import urllib2 as urllib
 except ImportError:
@@ -29,10 +31,7 @@ def log(txt,loglevel=xbmc.LOGDEBUG,force=False):
 class Main(xbmc.Monitor):
 
     def __init__(self):
-        self.dbConnection = None
-        self.dbCursor = None
-        self.loadDatabase()
-        self.createTable()
+        self.createDatabase()
         self.start()
 
     def start(self):
@@ -48,33 +47,24 @@ class Main(xbmc.Monitor):
         except:
             pass
 
-    def loadDatabase(self):
+    def createDatabase(self):
         try:
             if not os.path.exists(ADDON_DATA_PATH):
                 os.makedirs(ADDON_DATA_PATH)
-            self.dbConnection = sqlite3.connect(DATABASE)
+            with closing(sqlite3.connect(DATABASE)) as connection:
+                with closing(connection.cursor()) as cursor:
+                    cursor.execute("CREATE TABLE IF NOT EXISTS colors (id integer PRIMARY KEY, hash text NOT NULL, color text);")
         except Exception as e:
-            log('Database error: Failed to open database file %s - %s' % (DATABASE, e), xbmc.LOGERROR)
-
-        try:
-            self.dbCursor = self.dbConnection.cursor()
-        except Exception as e:
-            log('Database error: Failed to create database cursor - %s' % (e), xbmc.LOGERROR)
-
-        return
-    
-    def createTable(self):
-        try:
-            self.dbCursor.execute("CREATE TABLE IF NOT EXISTS colors (id integer PRIMARY KEY, hash text NOT NULL, color text);")
-        except Exception as e:
-            log('Database error: Failed to create table - %s' % e, xbmc.LOGERROR)
+            log('Database error: Failed to open database or create table - %s' % (e), xbmc.LOGERROR)
 
         return
 
     def lookupColor(self, hashval):
         try:
-            self.dbCursor.execute("SELECT * FROM colors WHERE hash=?", (hashval,))
-            data = self.dbCursor.fetchall()
+            with closing(sqlite3.connect(DATABASE)) as connection:
+                with closing(connection.cursor()) as cursor:
+                    cursor.execute("SELECT * FROM colors WHERE hash=?", (hashval,))
+                    data = cursor.fetchall()
             return data
         except Exception as e:
             log('Database error: lookupColor failed %s' % e, xbmc.LOGERROR)
@@ -84,8 +74,10 @@ class Main(xbmc.Monitor):
 
     def storeColor(self, hashval, value):
         try:
-            self.dbCursor.execute("INSERT INTO colors(hash,color) VALUES(?,?)", (hashval, value))
-            self.dbConnection.commit()
+            with closing(sqlite3.connect(DATABASE)) as connection:
+                with closing(connection.cursor()) as cursor:
+                    cursor.execute("INSERT INTO colors(hash,color) VALUES(?,?)", (hashval, value))
+                    connection.commit()
             return
         except Exception as e:
             log('Database error: storeColor failed %s' % e, xbmc.LOGERROR)
@@ -95,7 +87,9 @@ class Main(xbmc.Monitor):
 
     def removeColor(self, hashval):
         try:
-            self.dbCursor.execute("DELETE FROM colors WHERE hash=?", (hashval, ))
+            with closing(sqlite3.connect(DATABASE)) as connection:
+                with closing(connection.cursor()) as cursor:
+                    cursor.execute("DELETE FROM colors WHERE hash=?", (hashval, ))
             return
         except Exception as e:
             log('Database error: removeColor failed %s' % e, xbmc.LOGERROR)
@@ -141,8 +135,8 @@ class Main(xbmc.Monitor):
 
         # Set window property with color
         window = xbmcgui.Window(10000)
-        window.setProperty('colorgrab', domColor)
-        window.setProperty('cglocation', location)
+        window.setProperty('GTV.color', domColor)
+        window.setProperty('GTV.location', location)
 
     def processImage(self, image, hashval):
         global OLD_COLOR
@@ -217,7 +211,7 @@ class Main(xbmc.Monitor):
         except AttributeError:
             return silf._makeself(im)
 
-    # Get cached image fro Kodi
+    # Get cached image from Kodi
     # Code taken from script.embuary.helper authored by Sualfred
     # https://github.com/sualfred/script.embuary.helper/blob/leia/resources/lib/image.py
     def openImage(self, image):
