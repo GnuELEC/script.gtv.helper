@@ -23,6 +23,9 @@ ADDON_ID = ADDON.getAddonInfo('id')
 ADDON_DATA_PATH = os.path.join(xbmc.translatePath("special://profile/addon_data/%s" % ADDON_ID))
 DATABASE = ADDON_DATA_PATH + "/colors.db"
 
+USE_DB = True
+DEBUG_MODE = False
+
 def log(txt,loglevel=xbmc.LOGDEBUG,force=False):
     txt = txt.decode('utf-8')
     message = u'[ %s ] %s' % (ADDON_ID,txt)
@@ -31,7 +34,7 @@ def log(txt,loglevel=xbmc.LOGDEBUG,force=False):
 class Main(xbmc.Monitor):
 
     def __init__(self):
-        self.createDatabase()
+        if USE_DB: self.createDatabase()
         self.start()
 
     def start(self):
@@ -106,27 +109,31 @@ class Main(xbmc.Monitor):
         # Get hash value of image
         hashval = hashlib.md5(image).hexdigest()
 
-        # Check database to see if color already exists
-        val = self.lookupColor(hashval)
-
-        if len(val) == 1:
-            if not val[0][2]:
-                # Blank color found remove it from database and regenerate
-                self.removeColor(hashval)
+        if USE_DB: 
+            # Check database to see if color already exists
+            val = self.lookupColor(hashval)
+            if len(val) == 1:
+                if not val[0][2]:
+                    # Blank color found remove it from database and regenerate
+                    self.removeColor(hashval)
+                    # Generate new color
+                    domColor = self.processImage(image, hashval)
+                    # Store color in database
+                    self.storeColor(hashval, domColor)
+                    location="new"
+                # Found color in database
+                domColor = val[0][2]
+                location = "database"
+            else:
                 # Generate new color
                 domColor = self.processImage(image, hashval)
                 # Store color in database
                 self.storeColor(hashval, domColor)
                 location="new"
-            # Found color in database
-            domColor = val[0][2]
-            location = "database"
         else:
-            # Generate new color
-            domColor = self.processImage(image, hashval)
-            # Store color in database
-            self.storeColor(hashval, domColor)
-            location="new"
+                # Generate new color
+                domColor = self.processImage(image, hashval)
+                location="new"
 
         # Set window property with color
         window = xbmcgui.Window(10000)
@@ -141,11 +148,12 @@ class Main(xbmc.Monitor):
         try:
             # Open image and resize to make operations faster
             img = self.openImage(image)
+
             img.thumbnail((200, 200))
 
             # Enhance the saturation of the image
             enh = ImageEnhance.Color(img)
-            img = enh.enhance(2)
+            img = enh.enhance(3)
 
             # Generate a new palette image
             palImage = Image.new('P',(16,16))
@@ -153,6 +161,9 @@ class Main(xbmc.Monitor):
 
             # Quantize the image down to the defined palette
             finalImg = self.quantize(img, palImage)
+
+            if DEBUG_MODE:
+                finalImg.save(ADDON_DATA_PATH + "/" + hashval + '.bmp')
 
             # Count the frequancy of the colors in the final quantized image
             palette = finalImg.getpalette()
@@ -226,6 +237,8 @@ class Main(xbmc.Monitor):
                     if xbmcvfs.exists(cache):
                         try:
                             img = Image.open(xbmc.translatePath(cache))
+                            if DEBUG_MODE:
+                                log('img=%s' % xbmc.translatePath(cache), xbmc.LOGNOTICE)
                             return img
 
                         except Exception as error:
