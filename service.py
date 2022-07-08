@@ -18,18 +18,34 @@ except ImportError:
 OLD_IMAGE = ''
 OLD_COLOR = ''
 
+PY3 = True if sys.version_info.major == 3 else False
+
+try:
+    LOGNOTICE = xbmc.LOGNOTICE
+except:
+    LOGNOTICE = xbmc.LOGINFO
+LOGWARNING = xbmc.LOGWARNING
+LOGDEBUG = xbmc.LOGDEBUG
+LOGERROR = xbmc.LOGERROR
+
 ADDON = xbmcaddon.Addon()
-ADDON_ID = ADDON.getAddonInfo('id')
-ADDON_DATA_PATH = os.path.join(xbmc.translatePath("special://profile/addon_data/%s" % ADDON_ID))
+ADDONID = ADDON.getAddonInfo('id')
+ADDON_DATA_PATH = os.path.join(xbmcvfs.translatePath("special://profile/addon_data/%s" % ADDONID))
 DATABASE = ADDON_DATA_PATH + "/colors.db"
 
 USE_DB = True
 DEBUG_MODE = False
 
-def log(txt,loglevel=xbmc.LOGDEBUG,force=False):
-    txt = txt.decode('utf-8')
-    message = u'[ %s ] %s' % (ADDON_ID,txt)
-    xbmc.log(msg=message.encode('utf-8'), level=loglevel)
+def log(txt, loglevel=xbmc.LOGDEBUG):
+    if isinstance(txt, str):
+        if not PY3:
+            txt = txt.decode("utf-8")
+            message = u'%s: %s\n' % (ADDONID, txt)
+            xbmc.log(msg=message.encode("utf-8"), level=loglevel)
+        else:
+            message = u'%s: %s\n' % (ADDONID, txt)
+            xbmc.log(msg=message, level=loglevel)
+
 
 class Main(xbmc.Monitor):
 
@@ -38,7 +54,7 @@ class Main(xbmc.Monitor):
         self.start()
 
     def start(self):
-        log('Service started', xbmc.LOGNOTICE)
+        log('Service started', LOGNOTICE)
 
         while not self.abortRequested():
             self.getColor()
@@ -53,7 +69,7 @@ class Main(xbmc.Monitor):
                 with closing(connection.cursor()) as cursor:
                     cursor.execute("CREATE TABLE IF NOT EXISTS colors (id integer PRIMARY KEY, hash text NOT NULL, color text);")
         except Exception as e:
-            log('Database error: Failed to open database or create table - %s' % (e), xbmc.LOGERROR)
+            log('Database error: Failed to open database or create table - %s' % (e), LOGERROR)
 
         return
 
@@ -65,7 +81,7 @@ class Main(xbmc.Monitor):
                     data = cursor.fetchall()
             return data
         except Exception as e:
-            log('Database error: lookupColor failed %s' % e, xbmc.LOGERROR)
+            log('Database error: lookupColor failed %s' % e, LOGERROR)
             pass
 
         return []
@@ -78,7 +94,7 @@ class Main(xbmc.Monitor):
                     connection.commit()
             return
         except Exception as e:
-            log('Database error: storeColor failed %s' % e, xbmc.LOGERROR)
+            log('Database error: storeColor failed %s' % e, LOGERROR)
             pass
 
         return
@@ -90,7 +106,7 @@ class Main(xbmc.Monitor):
                     cursor.execute("DELETE FROM colors WHERE hash=?", (hashval, ))
             return
         except Exception as e:
-            log('Database error: removeColor failed %s' % e, xbmc.LOGERROR)
+            log('Database error: removeColor failed %s' % e, LOGERROR)
             pass
 
         return
@@ -107,7 +123,7 @@ class Main(xbmc.Monitor):
         OLD_IMAGE = image
 
         # Get hash value of image
-        hashval = hashlib.md5(image).hexdigest()
+        hashval = hashlib.md5(image.encode("utf-8")).hexdigest()
 
         if USE_DB: 
             # Check database to see if color already exists
@@ -185,7 +201,7 @@ class Main(xbmc.Monitor):
             OLD_COLOR = domColor
 
         except Exception as e:
-            log('Color error: image: %s hash: %s error: %s' % (image, hashval, e), xbmc.LOGERROR)
+            log('Color error: image: %s hash: %s error: %s' % (image, hashval, e), LOGERROR)
 
             # Any errors then just use the old color
             domColor = OLD_COLOR
@@ -238,14 +254,14 @@ class Main(xbmc.Monitor):
                         try:
                             img = Image.open(xbmc.translatePath(cache))
                             if DEBUG_MODE:
-                                log('img=%s' % xbmc.translatePath(cache), xbmc.LOGNOTICE)
+                                log('img=%s' % xbmc.translatePath(cache), LOGNOTICE)
                             return img
 
                         except Exception as error:
-                            log('Image error: Failed to open cached image - %s' % error, xbmc.LOGWARNING)
+                            log('Image error: Failed to open cached image - %s' % error, LOGWARNING)
 
             except Exception as error:
-                log('Image error: Failed to get image: %s - Error: %s' % (image, error), xbmc.LOGERROR)
+                log('Image error: Failed to get image: %s - Error: %s' % (image, error), LOGERROR)
                 pass
 
         return ''
